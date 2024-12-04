@@ -1,0 +1,141 @@
+---
+title: "Friends_analysis"
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(stringr)
+install.packages("tibble")
+library(tibble)
+```
+
+getting an idea about the data and columns.
+```{r}
+friends %>% 
+glimpse()
+glimpse(friends_emotions)
+glimpse(friends_info)
+head(friends)
+```
+most viewed episodes in the UNited states
+
+```{r}
+friends_info %>% 
+  count(season, title, us_views_millions, sort = T) %>% 
+  mutate(title = reorder(title, us_views_millions)) %>% 
+  head(10) %>% 
+  ggplot(aes(us_views_millions, title, fill = factor(season))) +geom_col() +geom_text(aes(label = us_views_millions), size = 5, nudge_x = -3) +
+  scale_x_continuous(limits = c(0, 60)) +scale_fill_discrete(name = "Season") +labs(y = NULL, x = "US Views (millions)",
+       title = "Most Viewed Friends' Episodes") +
+  theme(plot.title = element_text(size = 16), 
+        axis.title.x = element_text(size = 10), 
+        axis.text.y = element_text(size = 14))
+```
+Who delivered highest number of dialogues?
+
+```{r}
+
+main_characters <- friends %>%
+  filter(speaker %in% c("Rachel Green", "Ross Geller", "Joey Tribbiani", "Chandler Bing", "Monica Geller", "Phoebe Buffay")) %>%
+  group_by(speaker) %>%
+  summarise(text_count = n(), .groups = "drop") %>%
+  arrange(desc(text_count))
+print(main_characters)
+
+# Visualization: Bar graph for the main characters' text counts
+library(ggplot2)
+ggplot(main_characters, aes(x = reorder(speaker, -text_count), y = text_count, fill = speaker)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  labs(title = "Dialogue count of Main Friends Characters",
+       x = "Character",
+       y = "Number of Text Entries") +
+  scale_fill_brewer(palette = "Set2") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+```{r}
+#View the top 5 episodes per emotion in a statistical table
+top_emotions_table <- top_emotions %>%
+  select(emotion, season, episode, imdb_rating) %>%
+  arrange(emotion, desc(imdb_rating))
+print(top_emotions_table)
+
+# Plot: Top 5 IMDb rated episodes for each emotion, using individual horizontal bar charts
+ggplot(top_emotions, aes(x = imdb_rating, y = reorder(paste(season, episode, sep = " - "), imdb_rating), fill = factor(season))) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  facet_wrap(~ emotion, scales = "free_y") + 
+  labs(title = "Top 5 IMDb Rated Episodes by Emotion", x = "IMDb Rating", y = "Season - Episode") +
+  theme(axis.text.y = element_text(size = 12)) +
+  scale_fill_discrete(name = "Season") + 
+  theme(strip.text = element_text(size = 12)) +  coord_flip() 
+
+```
+Most repeated words
+```{r}
+# considering extra stop words too which are not detected by tidytext
+extra_stopwords <- c("yeah", "hey", "gonna", "uh", "y'know", "huh", "umm", "wanna","um","ah","fine")
+
+friends_words_tokenized <- friends %>%
+  unnest_tokens(word, text) %>%           
+  anti_join(stop_words, by = "word") %>%   
+  filter(!word %in% extra_stopwords) %>%  
+  filter(!speaker %in% c("Scene Directions", "#ALL#")) 
+
+# Count word frequencies and plot
+friends_words_tokenized %>%
+  count(word) %>%                          
+  mutate(prop = n / sum(n),                 
+         word = reorder(word, prop)) %>%    
+  arrange(-prop) %>%                        
+  head(20) %>%                             
+  ggplot(aes(prop, word, fill = prop)) +  geom_col(show.legend = F) + geom_text(aes(label = n), size = 3.5, nudge_x = -0.0003) + scale_x_continuous(labels = scales::label_percent()) +  
+  scale_fill_gradient(low = '#b38cd8', high = '#9b4d96') + # Gradient shades of purple
+  labs(y = NULL, x = "Proportion", title = "Friends: Most Popular Words ") + 
+  theme(axis.text = element_text(size = 12))  
+
+```
+Count of the iconic Regina Phalange
+```{r}
+library(dplyr)
+library(stringr)
+
+friends_words_tokenized %>%
+  filter(str_detect(word, regex("regina", ignore_case = TRUE))) %>% 
+  count(speaker, word, season) %>% 
+  mutate(proportion = paste(round(n / sum(n) * 100), "%", sep = ""))
+
+```
+Number of words per season
+```{r}
+friends_words <- friends %>% 
+  select(-scene, -utterance) %>% 
+  unnest_tokens(word, text)
+friends_words %>% 
+  count(season, sort = T) %>%
+  mutate(season = reorder(season, n, decreasing = T)) %>% 
+  ggplot(aes(season, n, fill = season)) +
+  geom_col(show.legend = F, width = .8) +
+  geom_text(aes(label = n), size = 4, nudge_y = -3000) +
+  labs(x = "Season", y = "Words", title = "Word Amount per Season") +
+  theme(axis.text = element_text(size = 12))
+```
+```{r}
+# Get the top 10 highest IMDb rated episodes, based on season and episode
+top_10_imdb_episodes <- friends_info %>%
+  arrange(desc(imdb_rating)) %>% 
+  head(10) %>%                   
+  select(season, episode, title, imdb_rating)  
+# Display the result
+top_10_imdb_episodes
+
+```
+
